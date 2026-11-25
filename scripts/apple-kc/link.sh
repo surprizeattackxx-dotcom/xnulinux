@@ -1,19 +1,22 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-2.0-only
-# On the user's machine (Linux or macOS, python3 and git): link Apple's kexts from the user's own copy of macOS's
-# kernelcache with the kernel and kexts of a kit (scripts/apple-kc/package.sh) into a kernel collection to boot macOS with:
-#   scripts/apple-kc/link.sh KIT KERNELCACHE [OUTPUT]       (default KIT/kc-apple.bin)
-# then IMAGE=OUTPUT scripts/xnulinux-boot.sh (or insmod xnu.ko image=...). Nothing of Apple's is in the kit; the
-# collection this makes is the one scripts/vm-xnu-rebuild.sh makes from the same kernelcache, byte for byte.
+# On the machine that runs xnu.ko (or any Linux or macOS with python3 and git): link Apple's kexts from the user's own
+# copy of macOS's kernelcache with the kernel and kexts of a kit (scripts/apple-kc/package.sh) into a kernel collection
+# to boot macOS with:
+#   scripts/apple-kc/link.sh KIT [KERNELCACHE [OUTPUT]]     (OUTPUT: /lib/firmware/xnu/kc-apple.bin where that exists)
+# then IMAGE=xnu/kc-apple.bin scripts/xnulinux-boot.sh. Nothing of Apple's is in the kit; the collection this makes is
+# the one scripts/vm-xnu-rebuild.sh makes from the same kernelcache, byte for byte.
 #
-# KERNELCACHE is macOS 27.2's kernelcache.release.vma2 (Apple's virtual Mac), from that IPSW: either the IM4P as it is
-# there (unpacked with `ipsw img4 im4p extract`, so ipsw must be on PATH) or already unpacked. The kit's kernel was
-# linked to fit that collection, so any other one is refused (sha256 in KIT/kit.json).
+# KERNELCACHE is macOS 27.2's kernelcache.release.vma2 (Apple's virtual Mac): the 27.2 IPSW itself or its URL (by
+# default Apple's, KIT/kit.json: only the kernelcache is downloaded), the IM4P from it, or that unpacked
+# (scripts/apple-kc/im4p.py; an LZFSE payload needs the lzfse tool). The kit's kernel was linked to fit that
+# collection, so any other one is refused (sha256 in KIT/kit.json).
 set -euo pipefail
 POC=$(cd "$(dirname "$0")/../.." && pwd)
-[ $# -ge 2 ] || { sed -n '3,6p' "$0" >&2; exit 2; }
+[ $# -ge 1 ] || { sed -n '3,6p' "$0" >&2; exit 2; }
 abs() { python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$1"; }
-KIT=$(abs "$1"); KC=$(abs "$2"); OUT=$(abs "${3:-$KIT/kc-apple.bin}")
+KIT=$(abs "$1"); OUT=$(abs "${3:-$KIT/kc-apple.bin}")
+INSTALL=; [ $# -lt 3 ] && [ -d /lib/firmware/xnu ] && INSTALL=/lib/firmware/xnu/kc-apple.bin
 W=${APPLE_KC_WORK:-$KIT/.work}; mkdir -p "$W"
 kit() { python3 -c 'import json,sys; v=json.load(open(sys.argv[1]))
 for k in sys.argv[2].split("."): v=v[k]
@@ -23,14 +26,14 @@ for b in iter(lambda: f.read(1<<24), b""): h.update(b)
 print(h.hexdigest())' "$1"; }
 magic() { python3 -c 'import sys; print(open(sys.argv[1],"rb").read(4).hex())' "$1"; }
 
-# the kernelcache, unpacked (a Mach-O starts cffaedfe; an IM4P is DER, starting with a SEQUENCE: 30)
-if [ "$(magic "$KC")" != cffaedfe ]; then
-	command -v ipsw >/dev/null || { echo "$KC is not an unpacked kernelcache, and ipsw (to unpack its IM4P) is not on PATH" >&2; exit 1; }
-	rm -f "$W/kernelcache"; ipsw img4 im4p extract -o "$W/kernelcache" "$KC" >/dev/null; KC=$W/kernelcache
+KC=${2:-$(kit ipsw)}; case "$KC" in http://*|https://*) ;; *) KC=$(abs "$KC") ;; esac
+# the kernelcache, unpacked (a Mach-O starts cffaedfe; else an IPSW, its URL or an IM4P)
+if [[ "$KC" == http* ]] || [ "$(magic "$KC")" != cffaedfe ]; then
+	rm -f "$W/kernelcache"; python3 "$POC/scripts/apple-kc/im4p.py" "$KC" "$W/kernelcache"; KC=$W/kernelcache
 fi
 want=$(kit kernelcache_sha256); have=$(sha "$KC")
 if [ "$want" != "$have" ]; then
-	echo "this kit links $(kit kernelcache) (sha256 $want); $2 is another one ($have)" >&2; exit 1
+	echo "this kit links $(kit kernelcache) (sha256 $want); ${2:-$(kit ipsw)} is another one ($have)" >&2; exit 1
 fi
 
 # macOS-DroidVM's kc-build at the kit's revision, with the kit's segment slots
@@ -49,4 +52,7 @@ cp "$KIT/segaddrs.json" "$D/k27/segaddrs.json"
 grep -E "wrote" "$W/kc-build.log" || true
 # AMFI of 27.2 expects platform version 27; the system disks the kit was made for carry 26 (scripts/kc-amfi-platform.py)
 python3 "$POC/scripts/kc-amfi-platform.py" "$OUT" "${AMFI_PLATFORM:-$(kit amfi_platform)}"
-echo "kernel collection with Apple's kexts: $OUT"
+if [ -n "$INSTALL" ]; then
+	sudo install -m 644 "$OUT" "$INSTALL" && OUT=$INSTALL
+fi
+echo "kernel collection with Apple's kexts: $OUT (boot it: IMAGE=xnu/$(basename "$OUT") scripts/xnulinux-boot.sh)"

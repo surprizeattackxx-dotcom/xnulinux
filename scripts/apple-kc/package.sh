@@ -58,6 +58,7 @@ keep = [k for k in keep if k and not (k in seen or seen.add(k))]
 (kit / 'kit.json').write_text(json.dumps({
     'kernelcache_sha256': kc_sha,
     'kernelcache': "macOS 27.2 (26B123) kernelcache.release.vma2, unpacked from its IM4P",
+    'ipsw': json.loads(Path(dvm, 'configs/macos-27.2-26B123.json').read_text())['ipsw']['url'],
     'droidvm': {'url': 'https://github.com/Droid-VM/macOS-DroidVM', 'rev': dvm_rev},
     'xnulinux_rev': poc_rev,
     'amfi_platform': int(amfi),

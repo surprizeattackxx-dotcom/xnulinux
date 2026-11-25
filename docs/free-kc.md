@@ -54,10 +54,13 @@ Apple's kexts from their own copy of macOS into a collection of their own, and c
    segment slots, xnulinux's kexts (objects and descriptions), `kc-free.bin`, and `kit.json` (the kernelcache it links,
    by sha256; the Apple kexts to keep; macOS-DroidVM's revision, whose `kc-build` links it; AMFI's platform version).
    Nothing of Apple's is in it.
-2. On the user's machine (python3 and git): `scripts/apple-kc/link.sh KIT KERNELCACHE [OUTPUT]`, where KERNELCACHE is
-   macOS 27.2's `kernelcache.release.vma2` from its IPSW, as the IM4P (unpacked with `ipsw`) or unpacked. It fetches
-   `kc-build` at the kit's revision and links the collection `vm-xnu-rebuild.sh` links from the same kernelcache, byte
-   for byte. Another kernelcache is refused: the kernel's segment slots were laid out for that one.
+2. On the machine that runs `xnu.ko` (python3, git, and `lzfse` for Apple's LZFSE: `apt install lzfse`):
+   `scripts/apple-kc/link.sh KIT`. It reads macOS 27.2's `kernelcache.release.vma2` straight from Apple's IPSW (its URL
+   is in `kit.json`; only that member is downloaded, with HTTP range requests), fetches `kc-build` at the kit's
+   revision, links the collection and installs it as `/lib/firmware/xnu/kc-apple.bin`. A second argument gives the
+   kernelcache instead: an IPSW or its URL, the IM4P, or that unpacked (`scripts/apple-kc/im4p.py`). The collection is
+   the one `vm-xnu-rebuild.sh` links from the same kernelcache, byte for byte. Another kernelcache is refused: the
+   kernel's segment slots were laid out for that one.
 3. `IMAGE=xnu/kc-apple.bin scripts/xnulinux-boot.sh` boots macOS on it; `IMAGE=xnu/kc-free.bin` boots PureDarwin.
 
 An auxiliary collection (Apple's kexts as a layer over `kc-free.bin`, chosen when `xnu.ko` loads) is not used: on arm64

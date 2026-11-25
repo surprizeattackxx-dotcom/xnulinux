@@ -103,8 +103,8 @@ the system volume, AMFI is patched and SIP relaxed, and memory access is slower 
    (`xnu-12377.121.6`) natively on arm64.
 2. `scripts/vm-xnu-rebuild.sh`: applies `xnu-patches/`, builds the kernel and `kexts/`, and links the kernel collection
    with Apple's kexts from your macOS installation. To link that collection without building anything,
-   `scripts/apple-kc/link.sh` takes a kit of the built kernel and kexts and your own macOS kernelcache
-   ([docs/free-kc.md](docs/free-kc.md)).
+   `scripts/apple-kc/link.sh`, on the machine that runs `xnu.ko`, takes a kit of the built kernel and kexts and
+   macOS 27.2's kernelcache, read from Apple's IPSW ([docs/free-kc.md](docs/free-kc.md)).
 3. `scripts/mk-macvm-disk.sh` (on the Mac): turns a macOS VM disk made by Apple's installer into the hosted system's disk
    and copies it into the Linux VM.
 4. `scripts/xnulinux-boot.sh` (on the arm64 Linux host): builds `fki.ko` and `xnu.ko` against the running kernel, brings
